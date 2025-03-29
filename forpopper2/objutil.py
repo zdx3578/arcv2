@@ -317,7 +317,7 @@ class ObjInf:
     obj_000: Objects   # 假设这是一个通用对象
     grid_H_W: Tuple[Integer, Integer]    # 假设是一个 (height, width) 的元组
     bounding_box: Tuple[Integer, Integer, Integer, Integer]    # 列表 [minr, minc, maxr, maxc]
-    color_ranking: tuple(IntegerTuple)  # 从大到小的 多对( color count , color );
+    color_ranking: Tuple[Tuple[int, int], ...]   # 从大到小的 多对( color count , color );
     background: int
     obj000_ops:list
     obj_ops:list
