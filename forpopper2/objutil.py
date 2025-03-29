@@ -19,6 +19,49 @@ import sys
 
 
 
+class IdManager:
+    def __init__(self):
+        # 初始化字段：tables 用于存储各 category 下的值与 ID 映射；next_id 用于记录下一个可用的 ID
+        self.tables = {}    # 例如: {'shape': {'shape_1': 1, 'shape_2': 2, ...}}
+        self.next_id = {}   # 例如: {'shape': 1}
+
+    def get_id(self, category, value):
+        """
+        获取 category 分类下 value 对应的 ID，
+        如果 value 不存在，则分配新的 ID。
+        """
+        if isinstance(value, set):
+            value = frozenset(value)
+
+        if category not in self.tables:
+            self.tables[category] = {}
+            self.next_id[category] = 1
+
+        category_table = self.tables[category]
+
+        if value not in category_table:
+            category_table[value] = self.next_id[category]
+            self.next_id[category] += 1
+
+        return category_table[value]
+
+    def print_all_ids(self):
+        """
+        打印所有类别下的所有对象及其对应的 ID。
+        """
+        for category, category_table in self.tables.items():
+            print(f"\n\nCategory: {category}, length: {len(category_table)} \n")
+            for value, id_val in category_table.items():
+                print(f"ID : {id_val} -> Object content -> : \n                  {value}")
+
+    def reset(self):
+        """
+        清空所有数据
+        """
+        self.tables = {}
+        self.next_id = {}
+        print("All data has been reset.")
+
 
 
 
@@ -489,49 +532,6 @@ def parsed_pd_outout_data(raw_data):
     if len(raw_data) > 3 and raw_data[3]:
         data["operation"] = raw_data[3]
     return data
-
-class IdManager:
-    def __init__(self):
-        # 初始化字段：tables 用于存储各 category 下的值与 ID 映射；next_id 用于记录下一个可用的 ID
-        self.tables = {}    # 例如: {'shape': {'shape_1': 1, 'shape_2': 2, ...}}
-        self.next_id = {}   # 例如: {'shape': 1}
-
-    def get_id(self, category, value):
-        """
-        获取 category 分类下 value 对应的 ID，
-        如果 value 不存在，则分配新的 ID。
-        """
-        if isinstance(value, set):
-            value = frozenset(value)
-
-        if category not in self.tables:
-            self.tables[category] = {}
-            self.next_id[category] = 1
-
-        category_table = self.tables[category]
-
-        if value not in category_table:
-            category_table[value] = self.next_id[category]
-            self.next_id[category] += 1
-
-        return category_table[value]
-
-    def print_all_ids(self):
-        """
-        打印所有类别下的所有对象及其对应的 ID。
-        """
-        for category, category_table in self.tables.items():
-            print(f"\n\nCategory: {category}, length: {len(category_table)} \n")
-            for value, id_val in category_table.items():
-                print(f"ID : {id_val} -> Object content -> : \n                  {value}")
-
-    def reset(self):
-        """
-        清空所有数据
-        """
-        self.tables = {}
-        self.next_id = {}
-        print("All data has been reset.")
 
 # def count_obj_ids(obj_set,colum):
 #     return set(obj.colum for obj in obj_set)
