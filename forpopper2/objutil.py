@@ -65,7 +65,7 @@ class IdManager:
 
 
 
-managerid = IdManager()
+# managerid = IdManager()
 
 
 def process_single_data(task: List[Any]) -> bool:
