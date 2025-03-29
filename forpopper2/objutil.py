@@ -329,9 +329,7 @@ class ObjInf:
 def lessforprintobj(obj):
     return (obj.pair_id,obj.in_or_out,obj.objparam,obj.obj_ID,obj.bounding_box, obj.color_ranking, obj.background, obj.grid_H_W)
 
-def objects_fromone_params(the_pair_id: int, in_or_out: str, grid: Grid, bools: Tuple[bool, bool, bool],hw:list) -> Objects:
-    b1, b2, b3 = bools  # 解包布尔值
-    return objects( grid, b1, b2, b3)
+
 
 
 

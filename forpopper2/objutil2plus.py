@@ -322,6 +322,9 @@ param_combinations: List[Tuple[bool, bool]] = [
     (False, False, False),
     (False, True, False) ]
 
+def objects_fromone_params(the_pair_id: int, in_or_out: str, grid: Grid, bools: Tuple[bool, bool, bool],hw:list) -> Objects:
+    b1, b2, b3 = bools  # 解包布尔值
+    return objects( grid, b1, b2, b3)
 
 # all_objects_from_grid 函数
 def all_objects_from_grid(the_pair_id: int, in_or_out: str, grid: Grid, hw:list) -> FrozenSet[Object]:
