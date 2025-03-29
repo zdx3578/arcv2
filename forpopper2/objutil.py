@@ -14,8 +14,8 @@ from copy import deepcopy
 
 from objutil2plus import *
 import sys
-sys.path.append("bateson/")
-from bateson import bateson_algorithm
+# sys.path.append("bateson/")
+# from bateson import bateson_algorithm
 
 
 
