@@ -296,7 +296,7 @@ def forprintlist(xx):
         print("\n\n")
         print("\n\n".join(map(str, x)))
 
-param_combinations: List[Tuple[bool, bool, bool]] = [
+param_combinations3: List[Tuple[bool, bool, bool]] = [
     (False, False, False),
     (False, False, True),
     (False, True, False),
@@ -315,6 +315,12 @@ param_combinations2: List[Tuple[bool, bool, bool]] = [
     (False, False, True),
     (False, True, False),
     (False, True, True) ]
+
+param_combinations: List[Tuple[bool, bool]] = [
+    (True, True, False),
+    (True, False, False),
+    (False, False, False),
+    (False, True, False) ]
 
 
 # all_objects_from_grid 函数
