@@ -6,6 +6,52 @@ import logging
 import traceback
 import dsl
 
+
+
+
+
+
+
+def grid2grid_fromgriddiff(grid1, grid2):
+    """
+    Compare two 2D grids and return two new grids containing only the differences.
+
+    Args:
+        grid1: First 2D grid (list of lists)
+        grid2: Second 2D grid (list of lists)
+
+    Returns:
+        tuple: (diff1, diff2) where:
+            - diff1 contains elements unique to grid1
+            - diff2 contains elements unique to grid2
+    """
+    if not grid1 or not grid2:
+        return None, None
+
+    # Check if dimensions are equal
+    rows1, cols1 = len(grid1), len(grid1[0])
+    rows2, cols2 = len(grid2), len(grid2[0])
+
+    if rows1 != rows2 or cols1 != cols2:
+        raise ValueError("Grids must have the same dimensions")
+
+    # Create two new grids to store differences
+    diff1 = [[None for _ in range(cols1)] for _ in range(rows1)]
+    diff2 = [[None for _ in range(cols1)] for _ in range(rows1)]
+
+    # Find differences
+    for i in range(rows1):
+        for j in range(cols1):
+            if grid1[i][j] != grid2[i][j]:
+                diff1[i][j] = grid1[i][j]
+                diff2[i][j] = grid2[i][j]
+
+    return diff1, diff2
+
+
+
+
+
 @contextmanager
 def safe_context():
     try:
