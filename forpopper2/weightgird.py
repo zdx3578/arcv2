@@ -21,7 +21,7 @@ def create_weight_grid(grid, base_weight=1):
 
 
 
-def apply_object_weights(grid, weight_grid, weight_increment=2, param_combinations=None):
+def apply_object_weights(grid, inorout, weight_grid, weight_increment=2, param_combinations=None):
     """
     对网格中属于对象的单元格应用权重增量，根据多种参数组合循环处理
 
@@ -44,6 +44,9 @@ def apply_object_weights(grid, weight_grid, weight_increment=2, param_combinatio
             (False, True, False)
         ]
 
+    if inorout not in ["in", "out"]:
+        raise ValueError("inorout参数必须是'in'或'out'")
+
     # 遍历所有参数组合
     for univalued, diagonal, without_bg in param_combinations:
         objs = objects(grid, univalued, diagonal, without_bg)
@@ -56,7 +59,7 @@ def apply_object_weights(grid, weight_grid, weight_increment=2, param_combinatio
     return weight_grid
 
 
-def apply_difference_weights(grid1, grid2, weight_grid, weight_increment=15):
+def apply_difference_weights(grid1, grid2, weight_grid, weight_increment=5):
     """
     对两个网格之间不同的单元格应用权重增量
 
@@ -152,19 +155,53 @@ def process_grid_with_weights(grid, grid2=None):
     weight_grid = create_weight_grid(grid, base_weight=0)
 
     # 应用对象权重（+10）
-    weight_grid = apply_object_weights(grid, weight_grid, weight_increment=3)
+    # weight_grid = apply_object_weights(grid, weight_grid, weight_increment=3)
+
+    # 调用示例
+    weight_grid_in = apply_object_weights(grid, "in", weight_grid, weight_increment=3)
+    weight_grid_out = apply_object_weights(grid2, "out", weight_grid, weight_increment=2)
 
     # 如果提供了grid2，应用差异权重（+15）
     if grid2 is not None:
-        weight_grid = apply_difference_weights(grid, grid2, weight_grid, weight_increment=5)
+        diff_weight_grid = apply_difference_weights(grid, grid2, weight_grid, weight_increment=5)
 
     # 应用自定义规则的示例（可根据需要扩展）
     # weight_grid = apply_custom_weight_rule(grid, weight_grid, location_based_weight_rule,
     #                                        locations=[(0, 0), (1, 1)], weight_increment=5)
+    weight_grid_in = add_weight_grids(weight_grid_in, diff_weight_grid)
+    weight_grid_out = add_weight_grids(weight_grid_out, diff_weight_grid)
 
-    return weight_grid
+    return weight_grid_in, weight_grid_out
 
+def add_weight_grids(grid1, grid2):
+    """
+    将两个权重网格的对应元素相加
 
+    参数:
+        grid1: 第一个权重网格
+        grid2: 第二个权重网格
+
+    返回:
+        新的权重网格，每个元素是对应位置元素的和
+    """
+    if not grid1 or not grid1[0]:
+        return grid2
+    if not grid2 or not grid2[0]:
+        return grid1
+
+    # 确保两个网格尺寸相同
+    if len(grid1) != len(grid2) or len(grid1[0]) != len(grid2[0]):
+        raise ValueError("两个权重网格的尺寸必须相同")
+
+    # 创建新网格，存储相加后的结果
+    result = []
+    for i in range(len(grid1)):
+        row = []
+        for j in range(len(grid1[0])):
+            row.append(grid1[i][j] + grid2[i][j])
+        result.append(row)
+
+    return result
 
 
 def normalize_weight_grid(weight_grid):
@@ -401,48 +438,8 @@ def display_weight_grid(weight_grid, title=None):
     # 打印表尾
     print(border)
 
-    
 
-# def display_weight_grid(weight_grid, title=None):
-#     """
-#     专门用于显示权重网格的函数，按照要求格式：
-#     - 整数显示（不带小数点）
-#     - 0值不显示
-#     - 没有竖列分割线
 
-#     参数:
-#     - weight_grid: 权重网格（二维列表）
-#     - title: 可选的标题
-#     """
-#     if not weight_grid or not weight_grid[0]:
-#         print("空网格")
-#         return
-
-#     if title:
-#         print(f"\n{title}")
-
-#     max_row = len(weight_grid)
-#     max_col = len(weight_grid[0])
-
-#     # 格式化网格（取整并跳过0值）
-#     formatted_grid = [[' ' for _ in range(max_col)] for _ in range(max_row)]
-#     for i, row in enumerate(weight_grid):
-#         for j, value in enumerate(row):
-#             if value == 0 or value == 0.0:
-#                 formatted_grid[i][j] = ' '
-#             else:
-#                 formatted_grid[i][j] = str(int(value))
-
-#     # 打印表头
-#     border = "+" + "-" * (max_col * 2 - 1) + "+"
-#     print(border)
-
-#     # 打印数据
-#     for row in formatted_grid:
-#         print("|" + " ".join(row) + "|")
-
-#     # 打印表尾
-#     print(border)
 
 def visualize_weights_as_heatmap(weight_grid, title=None):
     """
@@ -510,224 +507,6 @@ def visualize_weights_as_heatmap(weight_grid, title=None):
 
 
 
-
-# from typing import List, Tuple, Optional, Union
-# import math
-
-# def display_matrices(diff1: Union[List[Tuple[int, Tuple[int, int]]], List[List[Union[int, float]]]],
-#                     HW: Optional[list] = None,
-#                     diff2: Optional[Union[List[Tuple[int, Tuple[int, int]]], List[List[Union[int, float]]]]] = None,
-#                     diff3: Optional[Union[List[Tuple[int, Tuple[int, int]]], List[List[Union[int, float]]]]] = None,
-#                     is_grid_format: bool = False):
-#     """
-#     展示二维矩阵，支持两种输入格式：
-#     1. 元素和位置的元组列表 [(value, (row, col)), ...]
-#     2. 直接的二维网格 [[value, value, ...], [value, value, ...], ...]
-
-#     参数:
-#     - diff1: 必填，包含不同元素及其位置的集合或二维网格。
-#     - HW: 可选，矩阵的高和宽 [height, width]，如果不提供则自动计算。
-#     - diff2, diff3: 可选，额外的元素集合或二维网格。
-#     - is_grid_format: 指示输入是否为二维网格格式（True）或元组列表格式（False）。
-#     """
-#     if is_grid_format:
-#         # 如果输入是二维网格格式
-#         if not diff1:
-#             print("无内容")
-#             return
-
-#         max_row = len(diff1)
-#         max_col = len(diff1[0]) if max_row > 0 else 0
-
-#         # 初始化矩阵，复制第一个网格
-#         matrix = [row[:] for row in diff1]
-
-#         # 如果有第二个网格，合并它
-#         if diff2 and len(diff2) == max_row and len(diff2[0]) == max_col:
-#             for i in range(max_row):
-#                 for j in range(max_col):
-#                     if diff2[i][j] != ' ':
-#                         if matrix[i][j] == ' ':
-#                             matrix[i][j] = str(diff2[i][j])
-#                         else:
-#                             matrix[i][j] = str(matrix[i][j]) + ',' + str(diff2[i][j])
-
-#         # 如果有第三个网格，也合并它
-#         if diff3 and len(diff3) == max_row and len(diff3[0]) == max_col:
-#             for i in range(max_row):
-#                 for j in range(max_col):
-#                     if diff3[i][j] != ' ':
-#                         if matrix[i][j] == ' ':
-#                             matrix[i][j] = str(diff3[i][j])
-#                         else:
-#                             matrix[i][j] = str(matrix[i][j]) + ',' + str(diff3[i][j])
-#     else:
-#         # 原来的元组列表处理逻辑
-#         # 合并所有不同元素的位置
-#         combined = list(diff1) + (diff2 if diff2 else []) + (diff3 if diff3 else [])
-
-#         if not combined:
-#             print("无差异")
-#             return
-
-#         # 确定矩阵的大小
-#         if HW:
-#             max_row, max_col = HW
-#         else:
-#             max_row = max(pos[0] for _, pos in combined) + 1
-#             max_col = max(pos[1] for _, pos in combined) + 1
-
-#         # 初始化空矩阵，初始内容为空格
-#         matrix = [[' ' for _ in range(max_col)] for _ in range(max_row)]
-
-#         # 填充矩阵：如果同一位置有多个值，则用逗号连接显示
-#         for value, (row, col) in combined:
-#             current = matrix[row][col]
-#             text = str(value)
-#             if current == ' ':
-#                 matrix[row][col] = text
-#             else:
-#                 matrix[row][col] = current + ',' + text
-
-#     # 处理矩阵元素以使其适合显示
-#     formatted_matrix = []
-#     for row in matrix:
-#         formatted_row = []
-#         for cell in row:
-#             # 如果是数字，格式化为最多显示小数点后2位
-#             if isinstance(cell, (int, float)):
-#                 cell_str = f"{cell:.2f}" if isinstance(cell, float) else str(cell)
-#                 # 截断长数字
-#                 if len(cell_str) > 6:
-#                     cell_str = cell_str[:6]
-#             else:
-#                 cell_str = str(cell)
-#                 if len(cell_str) > 6:
-#                     cell_str = cell_str[:6]
-#             formatted_row.append(cell_str)
-#         formatted_matrix.append(formatted_row)
-
-#     # 确定每列的最大宽度
-#     col_widths = []
-#     for j in range(len(formatted_matrix[0])):
-#         col_width = max(len(row[j]) for row in formatted_matrix)
-#         col_widths.append(col_width)
-
-#     # 打印带有边框的矩阵
-#     horizontal_border = "+" + "+".join("-" * (width + 2) for width in col_widths) + "+"
-#     print(horizontal_border)
-
-#     for row in formatted_matrix:
-#         formatted_cells = [f" {cell:{width}} " for cell, width in zip(row, col_widths)]
-#         print("|" + "|".join(formatted_cells) + "|")
-
-#     print(horizontal_border)
-
-# def display_weight_grid(weight_grid, title=None, float_precision=2):
-#     """
-#     专门用于显示权重网格的函数
-
-#     参数:
-#     - weight_grid: 权重网格（二维列表）
-#     - title: 可选的标题
-#     - float_precision: 浮点数精度
-#     """
-#     if not weight_grid or not weight_grid[0]:
-#         print("空网格")
-#         return
-
-#     if title:
-#         print(f"\n{title}")
-
-#     max_row = len(weight_grid)
-#     max_col = len(weight_grid[0])
-
-#     # 格式化网格
-#     formatted_grid = []
-#     for row in weight_grid:
-#         formatted_row = []
-#         for value in row:
-#             if isinstance(value, float):
-#                 # 格式化浮点数
-#                 formatted_value = f"{value:.{float_precision}f}"
-#             else:
-#                 formatted_value = str(value)
-#             formatted_row.append(formatted_value)
-#         formatted_grid.append(formatted_row)
-
-#     # 确定每列的最大宽度
-#     col_widths = []
-#     for j in range(max_col):
-#         col_width = max(len(row[j]) for row in formatted_grid)
-#         col_widths.append(col_width)
-
-#     # 打印表头
-#     header = "+" + "+".join("-" * (width + 2) for width in col_widths) + "+"
-#     print(header)
-
-#     # 打印行索引和数据
-#     for i, row in enumerate(formatted_grid):
-#         row_str = "|"
-#         for j, (cell, width) in enumerate(zip(row, col_widths)):
-#             row_str += f" {cell:>{width}} |"
-#         print(row_str)
-
-#     # 打印表尾
-#     print(header)
-
-# def visualize_weights_as_heatmap(weight_grid, title=None):
-#     """
-#     将权重网格可视化为一个简单的热图（使用ASCII字符）
-
-#     参数:
-#     - weight_grid: 权重网格（二维列表）
-#     - title: 可选的标题
-#     """
-#     if not weight_grid or not weight_grid[0]:
-#         print("空网格")
-#         return
-
-#     if title:
-#         print(f"\n{title}")
-
-#     # 找出最大和最小权重
-#     all_weights = [weight for row in weight_grid for weight in row]
-#     min_weight = min(all_weights)
-#     max_weight = max(all_weights)
-
-#     # 如果所有权重相同，无法显示热图
-#     if min_weight == max_weight:
-#         print(f"所有单元格权重相同: {min_weight}")
-#         return
-
-#     # 创建权重到符号的映射
-#     heat_symbols = " ._-=+*#%@"  # 从低到高的强度
-
-#     # 创建热图
-#     heatmap = []
-#     for row in weight_grid:
-#         heat_row = []
-#         for weight in row:
-#             # 归一化权重到0-1范围
-#             normalized = (weight - min_weight) / (max_weight - min_weight)
-#             # 映射到符号
-#             symbol_index = min(int(normalized * len(heat_symbols)), len(heat_symbols) - 1)
-#             heat_row.append(heat_symbols[symbol_index])
-#         heatmap.append(heat_row)
-
-#     # 打印热图
-#     print(f"热图 (权重范围: {min_weight:.2f} - {max_weight:.2f}):")
-#     for row in heatmap:
-#         print("".join(row))
-
-#     # 打印图例
-#     print("\n图例:")
-#     legend_steps = 5
-#     for i in range(legend_steps + 1):
-#         normalized = i / legend_steps
-#         symbol_index = min(int(normalized * len(heat_symbols)), len(heat_symbols) - 1)
-#         value = min_weight + normalized * (max_weight - min_weight)
-#         print(f"{heat_symbols[symbol_index]}: ~{value:.2f}")
 
 
 
