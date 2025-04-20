@@ -1,5 +1,6 @@
 from dsl import objects
-from dsl2 import grid2grid_fromgriddiff
+from dsl2 import *
+from objutil import *
 
 
 def create_weight_grid(grid, base_weight=1):
@@ -21,21 +22,23 @@ def create_weight_grid(grid, base_weight=1):
 
 
 
-def apply_object_weights(grid, inorout, weight_grid, weight_increment=2, param_combinations=None):
+def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinations=None):
     """
-    对网格中属于对象的单元格应用权重增量，根据多种参数组合循环处理
+    对整个ARC任务的训练数据和测试数据的输入网格应用权重分析，
+    找出所有网格中相同形状的对象并进行权重设置
 
     参数:
-        grid: 输入的2D网格（列表的列表）
-        weight_grid: 要更新的权重网格
-        weight_increment: 对象单元格的权重增加值
+        task: ARC任务数据，包含'train'和'test'两部分
+        weight_increment: 对象单元格的基础权重增加值
         param_combinations: objects函数参数组合列表，每个组合为(univalued, diagonal, without_bg)的三元组
-                            如果为None，将使用默认参数组合
+                          如果为None，将使用默认参数组合
 
     返回:
-        更新后的包含对象权重的权重网格
+        包含所有输入和输出网格权重的字典
     """
-    # 如果未提供参数组合，使用默认组合
+
+    diff_weight_increment = 5
+
     if param_combinations is None:
         param_combinations = [
             (True, True, False),
@@ -44,19 +47,297 @@ def apply_object_weights(grid, inorout, weight_grid, weight_increment=2, param_c
             (False, True, False)
         ]
 
-    if inorout not in ["in", "out"]:
-        raise ValueError("inorout参数必须是'in'或'out'")
+    # 获取训练数据和测试数据
+    train_data = task['train']
+    test_data = task['test']
 
-    # 遍历所有参数组合
-    for univalued, diagonal, without_bg in param_combinations:
-        objs = objects(grid, univalued, diagonal, without_bg)
+    # 创建一个存储所有网格和对象的字典
+    all_grids = {
+        'train_inputs': [],  # [(pair_id, grid), ...]
+        'train_outputs': [], # [(pair_id, grid), ...]
+        'test_inputs': []    # [(pair_id, grid), ...]
+    }
 
-        for obj in objs:
-            for _, loc in obj:
-                i, j = loc
-                weight_grid[i][j] += weight_increment
+    # 初始化对象集和权重网格
+    object_sets = {}
+    weight_grids = {}
 
-    return weight_grid
+    # 收集所有网格
+    for pair_id, data_pair in enumerate(train_data):
+        I = data_pair['input']
+        O = data_pair['output']
+        I = tuple(tuple(row) for row in I)
+        O = tuple(tuple(row) for row in O)
+
+        # 添加到网格集合
+        all_grids['train_inputs'].append((pair_id, I))
+        all_grids['train_outputs'].append((pair_id, O))
+
+        # 初始化权重网格
+        weight_grids[f'train_input_{pair_id}'] = [[0 for _ in range(len(I[0]))] for _ in range(len(I))]
+        weight_grids[f'train_output_{pair_id}'] = [[0 for _ in range(len(O[0]))] for _ in range(len(O))]
+
+    for test_id, test_case in enumerate(test_data):
+        test_input = test_case['input']
+        all_grids['test_inputs'].append((test_id, test_input))
+        weight_grids[f'test_input_{test_id}'] = [[0 for _ in range(len(test_input[0]))] for _ in range(len(test_input))]
+
+    # 步骤0：应用网格差异权重（优化版）
+    for pair_id, data_pair in enumerate(train_data):
+        I = data_pair['input']
+        O = data_pair['output']
+        I = tuple(tuple(row) for row in I)
+        O = tuple(tuple(row) for row in O)
+
+        # 获取网格的尺寸
+        rows_i, cols_i = len(I), len(I[0])
+        rows_o, cols_o = len(O), len(O[0])
+
+        # 检查尺寸是否相同（适用grid2grid_fromgriddiff函数的要求）
+        if rows_i == rows_o and cols_i == cols_o:
+            # 生成差异网格
+            diff_i_to_o, diff_o_to_i = grid2grid_fromgriddiff(I, O)
+
+            if diff_i_to_o is not None and diff_o_to_i is not None:
+                # 创建差异权重网格
+                diff_weight_grid = [[0 for _ in range(cols_i)] for _ in range(rows_i)]
+
+                # 填充差异权重
+                for i in range(rows_i):
+                    for j in range(cols_i):
+                        if diff_i_to_o[i][j] is not None:  # 发现差异
+                            diff_weight_grid[i][j] = diff_weight_increment
+
+                # 将差异权重网格添加到输入和输出权重网格
+                weight_grids[f'train_input_{pair_id}'] = add_weight_grids(
+                    weight_grids[f'train_input_{pair_id}'], diff_weight_grid
+                )
+                weight_grids[f'train_output_{pair_id}'] = add_weight_grids(
+                    weight_grids[f'train_output_{pair_id}'], diff_weight_grid
+                )
+        else:
+            # 对于尺寸不同的网格，我们不能直接使用grid2grid_fromgriddiff
+            # 这里可以添加额外的处理逻辑，或者简单地跳过
+            # 例如，使用其他方法计算差异，或者直接使用原始网格
+            raise ValueError(
+                f"输入网格和输出网格的尺寸不匹配: {rows_i}x{cols_i} vs {rows_o}x{cols_o}"
+            )
+
+    # 步骤1：生成所有网格的对象集
+    for grid_type in all_grids:
+        for idx, grid in all_grids[grid_type]:
+            grid_id = f"{grid_type.rstrip('s')}_{idx}"  # 例如 'train_input_0'
+            height, width = len(grid), len(grid[0]) if grid else 0
+
+            # 确定in_or_out参数
+            in_or_out = "in" if "input" in grid_id else "out"
+
+            # 生成对象集
+            object_sets[f"{in_or_out}_obj_set_{grid_id}"] = all_pureobjects_from_grid(param_combinations=param_combinations,
+                the_pair_id=idx, in_or_out=in_or_out, grid=grid, hw=(height, width)
+            )
+
+    # 步骤2：为所有对象设置基本权重
+    for grid_type in all_grids:
+        for idx, grid in all_grids[grid_type]:
+            grid_id = f"{grid_type.rstrip('s')}_{idx}"
+            in_or_out = "in" if "input" in grid_id else "out"
+
+            # 获取对象集
+            obj_set_key = f"{in_or_out}_obj_set_{grid_id}"
+            if obj_set_key not in object_sets:
+                continue
+
+            # 为对象设置基本权重
+            for obj in object_sets[obj_set_key]:
+                for value, loc in obj:
+                    i, j = loc
+                    weight_grids[grid_id][i][j] += weight_increment
+
+    # # 步骤3：创建所有对象的规范化形状字典
+    # normalized_shapes = {}  # {规范化形状: [(网格ID, 原始对象, 对象类型)]}
+
+    # for grid_type in all_grids:
+    #     for idx, grid in all_grids[grid_type]:
+    #         grid_id = f"{grid_type.rstrip('s')}_{idx}"
+    #         in_or_out = "in" if "input" in grid_id else "out"
+
+    #         obj_set_key = f"{in_or_out}_obj_set_{grid_id}"
+    #         if obj_set_key not in object_sets:
+    #             continue
+
+    #         for obj in object_sets[obj_set_key]:
+    #             normalized_obj = shift_pure_obj_to_0_0_0(obj)  # 获取规范化形状
+
+    #             if normalized_obj not in normalized_shapes:
+    #                 normalized_shapes[normalized_obj] = []
+    #             normalized_shapes[normalized_obj].append((grid_id, obj, in_or_out))
+    # 步骤3：创建所有对象的规范化形状字典
+    normalized_shapes = {}  # {规范化形状: [(网格ID, 原始对象, 对象类型)]}
+
+    for grid_type in all_grids:
+        for idx, grid in all_grids[grid_type]:
+            grid_id = f"{grid_type.rstrip('s')}_{idx}"
+            in_or_out = "in" if "input" in grid_id else "out"
+
+            obj_set_key = f"{in_or_out}_obj_set_{grid_id}"
+            if obj_set_key not in object_sets:
+                continue
+
+            # 如果 normalized_obj 是包含 (value, (i, j)) 元素的集合
+            for obj in object_sets[obj_set_key]:
+                # 获取规范化形状
+                normalized_obj = shift_pure_obj_to_0_0_0(obj)
+
+                # 将集合中的元素转换为可排序的元组列表
+                # 将每个 (value, (i, j)) 转换为 (value, i, j)
+                sorted_elements = []
+                for value, loc in normalized_obj:
+                    i, j = loc
+                    sorted_elements.append((value, i, j))
+
+                # 排序并创建可哈希的表示
+                hashable_obj = tuple(sorted(sorted_elements))
+
+                if hashable_obj not in normalized_shapes:
+                    normalized_shapes[hashable_obj] = []
+                normalized_shapes[hashable_obj].append((grid_id, obj, in_or_out))
+
+    # 步骤4：根据相同形状的对象数量增加权重
+    for shape, obj_list in normalized_shapes.items():
+        num_objects = len(obj_list)
+
+        if num_objects > 1:  # 至少有两个相同形状的对象
+            # 为所有相同形状的对象增加相应权重
+            shape_bonus = num_objects  # 相同形状的对象数量作为额外权重
+
+            for grid_id, obj, _ in obj_list:
+                for _, loc in obj:
+                    i, j = loc
+                    weight_grids[grid_id][i][j] += shape_bonus
+
+    # 步骤5：分析相同颜色并调整权重
+    for shape, obj_list in normalized_shapes.items():
+        if len(obj_list) <= 1:
+            continue  # 跳过没有匹配的形状
+
+        # 按对象权重合计排序
+        obj_with_weights = []
+        for grid_id, obj, obj_type in obj_list:
+            weight_sum = sum(weight_grids[grid_id][i][j] for _, (i, j) in obj)
+            obj_with_weights.append((grid_id, obj, obj_type, weight_sum))
+
+        # 按权重降序排列
+        obj_with_weights.sort(key=lambda x: x[3], reverse=True)
+
+        # 分析相同颜色
+        for i in range(len(obj_with_weights)):
+            high_grid_id, high_obj, high_type, high_weight = obj_with_weights[i]
+
+            for j in range(i+1, len(obj_with_weights)):
+                low_grid_id, low_obj, low_type, low_weight = obj_with_weights[j]
+
+                # 检查是否有相同颜色
+                matching_colors = has_matching_colors(high_obj, low_obj)
+
+                if matching_colors:
+                    # 将低权重对象中匹配颜色的位置提升到高权重
+                    for high_val, high_loc in high_obj:
+                        for low_val, low_loc in low_obj:
+                            if high_val == low_val:  # 颜色匹配
+                                li, lj = low_loc
+                                # 计算高权重对象中相同颜色位置的权重
+                                target_weight = 0
+                                for hv, hl in high_obj:
+                                    if hv == low_val:
+                                        hi, hj = hl
+                                        target_weight = max(target_weight, weight_grids[high_grid_id][hi][hj])
+
+                                # 提升低权重对象的权重
+                                if target_weight > 0 and weight_grids[low_grid_id][li][lj] < target_weight:
+                                    weight_grids[low_grid_id][li][lj] = target_weight
+
+    return weight_grids
+
+def has_matching_colors(obj1, obj2):
+    """
+    检查两个对象是否有相同颜色的部分
+
+    参数:
+        obj1: 第一个对象，格式为 [(value, location), ...]
+        obj2: 第二个对象，格式为 [(value, location), ...]
+
+    返回:
+        如果有相同颜色的部分，返回True；否则返回False
+    """
+    colors1 = set(val for val, _ in obj1)
+    colors2 = set(val for val, _ in obj2)
+
+    # 检查是否有共同的颜色
+    return bool(colors1.intersection(colors2))
+
+
+def process_grid_with_weights(task):
+    """
+    处理网格（或一对网格）并创建应用了所有规则的权重网格
+
+    参数:
+        grid: 主要的2D网格（列表的列表）
+        grid2: 可选的第二个网格，用于差异计算
+
+    返回:
+        生成的权重网格
+    """
+    # 用基础权重1初始化权重网格
+    weight_grid = create_weight_grid(grid, base_weight=0)
+
+    # 应用对象权重（+10）
+    # weight_grid = apply_object_weights(grid, weight_grid, weight_increment=3)
+
+    # 调用示例
+    weight_grid_in = apply_object_weights(grid, "in", weight_grid, weight_increment=3)
+    weight_grid_out = apply_object_weights(grid2, "out", weight_grid, weight_increment=2)
+
+    # 如果提供了grid2，应用差异权重（+15）
+    if grid2 is not None:
+        diff_weight_grid = apply_difference_weights(grid, grid2, weight_grid, weight_increment=5)
+
+    # 应用自定义规则的示例（可根据需要扩展）
+    # weight_grid = apply_custom_weight_rule(grid, weight_grid, location_based_weight_rule,
+    #                                        locations=[(0, 0), (1, 1)], weight_increment=5)
+    weight_grid_in = add_weight_grids(weight_grid_in, diff_weight_grid)
+    weight_grid_out = add_weight_grids(weight_grid_out, diff_weight_grid)
+
+    return weight_grid_in, weight_grid_out
+
+
+
+def apply_object_weights(grid_pair, object_sets, in_weight_grid, out_weight_grid, weight_increment=2, param_combinations=None):
+    """
+    对单个网格对中属于对象的单元格应用权重增量
+
+    参数:
+        grid_pair: 包含输入和输出网格的元组(I, O)
+        object_sets: 包含所有对象集合的字典，使用格式 "in_obj_set_{pair_id}" 和 "out_obj_set_{pair_id}"
+        in_weight_grid: 输入网格的权重矩阵
+        out_weight_grid: 输出网格的权重矩阵
+        weight_increment: 对象单元格的权重增加值
+        param_combinations: objects函数参数组合列表
+
+    返回:
+        更新后的包含对象权重的权重网格元组 (in_weight_grid, out_weight_grid)
+    """
+    # 创建一个临时任务结构
+    temp_task = {
+        'train': [{'input': grid_pair[0], 'output': grid_pair[1]}],
+        'test': []
+    }
+
+    # 调用完整版函数
+    weight_grids = apply_object_weights_for_arc_task(temp_task, weight_increment, param_combinations)
+
+    # 返回更新后的权重网格
+    return weight_grids['train_input_0'], weight_grids['train_output_0']
 
 
 def apply_difference_weights(grid1, grid2, weight_grid, weight_increment=5):
@@ -140,38 +421,7 @@ def pattern_based_weight_rule(grid, weight_grid, pattern_value, weight_increment
 
     return weight_grid
 
-def process_grid_with_weights(grid, grid2=None):
-    """
-    处理网格（或一对网格）并创建应用了所有规则的权重网格
 
-    参数:
-        grid: 主要的2D网格（列表的列表）
-        grid2: 可选的第二个网格，用于差异计算
-
-    返回:
-        生成的权重网格
-    """
-    # 用基础权重1初始化权重网格
-    weight_grid = create_weight_grid(grid, base_weight=0)
-
-    # 应用对象权重（+10）
-    # weight_grid = apply_object_weights(grid, weight_grid, weight_increment=3)
-
-    # 调用示例
-    weight_grid_in = apply_object_weights(grid, "in", weight_grid, weight_increment=3)
-    weight_grid_out = apply_object_weights(grid2, "out", weight_grid, weight_increment=2)
-
-    # 如果提供了grid2，应用差异权重（+15）
-    if grid2 is not None:
-        diff_weight_grid = apply_difference_weights(grid, grid2, weight_grid, weight_increment=5)
-
-    # 应用自定义规则的示例（可根据需要扩展）
-    # weight_grid = apply_custom_weight_rule(grid, weight_grid, location_based_weight_rule,
-    #                                        locations=[(0, 0), (1, 1)], weight_increment=5)
-    weight_grid_in = add_weight_grids(weight_grid_in, diff_weight_grid)
-    weight_grid_out = add_weight_grids(weight_grid_out, diff_weight_grid)
-
-    return weight_grid_in, weight_grid_out
 
 def add_weight_grids(grid1, grid2):
     """
@@ -257,7 +507,7 @@ def normalize_weight_grid(weight_grid):
 
     return normalized_grid
 
-def apply_weight_correction(weight_grid, scale_factor=10):
+def apply_weight_correction(weight_grid, scale_factor=9):
     """
     应用权重修正和缩放：
     1. 归一化权重

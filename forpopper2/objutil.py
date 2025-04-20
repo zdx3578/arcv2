@@ -373,7 +373,13 @@ def lessforprintobj(obj):
     return (obj.pair_id,obj.in_or_out,obj.objparam,obj.obj_ID,obj.bounding_box, obj.color_ranking, obj.background, obj.grid_H_W)
 
 
+def all_pureobjects_from_grid(param_combinations, the_pair_id: int, in_or_out: str, grid: Grid, hw:list, weight = 0 ) -> FrozenSet[Object]:
+    acc: FrozenSet[Object] = frozenset()  # 初始化空集合
+    for params in param_combinations:
+        acc = acc.union(objects_fromone_params(the_pair_id, in_or_out, grid, params,hw))
+        # print()
 
+    return acc
 
 
 def objects_info_from_one_params(the_pair_id: int, in_or_out: str, grid: Grid, bools: Tuple[bool, bool, bool],hw:list) -> Objects:
@@ -721,6 +727,10 @@ param_combinations: List[Tuple[bool, bool]] = [
 def objects_fromone_params(the_pair_id: int, in_or_out: str, grid: Grid, bools: Tuple[bool, bool, bool],hw:list) -> Objects:
     b1, b2, b3 = bools  # 解包布尔值
     return objects( grid, b1, b2, b3)
+
+# def objects_fromone_params(the_pair_id: int, in_or_out: str, grid: Grid, bools: Tuple[bool, bool, bool],hw:list) -> Objects:
+#     b1, b2, b3 = bools  # 解包布尔值
+#     return objects( grid, b1, b2, b3)
 
 # all_objects_from_grid 函数
 def all_objects_from_grid(the_pair_id: int, in_or_out: str, grid: Grid, hw:list) -> FrozenSet[Object]:

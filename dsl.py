@@ -883,7 +883,15 @@ def objects(
     # bg = mostcolor(grid) if without_bg else None
     # bg = 0 if without_bg else None
     element = grid
-    values = [v for r in element for v in r] if isinstance(element, tuple) else [v for v, _ in element]
+    # values = [v for r in element for v in r] if isinstance(element, tuple) else [v for v, _ in element]
+    # Corrected version
+    if isinstance(element, (tuple, list)) and all(isinstance(item, (tuple, list)) for item in element):
+        # Handle 2D grid case (nested tuples or lists)
+        values = [v for r in element for v in r]
+    else:
+        # Handle object case (list of (value, location) pairs)
+        values = [v for v, _ in element]
+        
     if without_bg:
         if  0 in values:
             bg = 0
