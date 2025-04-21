@@ -239,7 +239,7 @@ def apply_color_matching_weights(normalized_shapes, weight_grids, all_grids, pix
         normalized_shapes: 规范化形状字典
         weight_grids: 权重网格字典
         all_grids: 所有网格的字典
-        pixel_threshold_pct: 颜色占比阈值百分比，超过此阈值的颜色不会被更新
+        pixel_threshold_pct: 颜色占比阈值百分比，超过此阈值的颜色会被特殊处理
     """
     for shape, obj_list in normalized_shapes.items():
         if len(obj_list) <= 1:
@@ -316,20 +316,22 @@ def apply_color_matching_weights(normalized_shapes, weight_grids, all_grids, pix
                         # 检查低权重对象中该颜色的占比
                         low_color_pct = (low_color_counts.get(color, 0) / low_total_pixels) * 100
 
-                        # 如果任一对象中该颜色占比超过阈值，则跳过
+                        # 如果任一对象中该颜色占比超过阈值，则将该颜色区域的权重归零
                         if high_color_pct > pixel_threshold_pct or low_color_pct > pixel_threshold_pct:
-                            continue
+                            # 将高权重对象中该颜色的权重归零
+                            for (hi, hj), _ in high_obj_by_color[color]:
+                                weight_grids[high_grid_id][hi][hj] = 0
 
-                        target_weight = int(high_color_max_weights[color])
+                            # 将低权重对象中该颜色的权重归零
+                            for li, lj in low_obj_by_color[color]:
+                                weight_grids[low_grid_id][li][lj] = 0
+                        else:
+                            # 对于占比不超过阈值的颜色，更新低权重对象中的权重
+                            target_weight = int(high_color_max_weights[color])
+                            for li, lj in low_obj_by_color[color]:
+                                if weight_grids[low_grid_id][li][lj] < target_weight:
+                                    weight_grids[low_grid_id][li][lj] = target_weight
 
-                        # 更新低权重对象中共有颜色的所有位置
-                        for li, lj in low_obj_by_color[color]:
-                            if weight_grids[low_grid_id][li][lj] < target_weight:
-                                weight_grids[low_grid_id][li][lj] = target_weight
-
-                        # 如果任一对象中该颜色占比超过阈值，则权重归零
-                        if high_color_pct > pixel_threshold_pct or low_color_pct > pixel_threshold_pct:
-                            
 
 
 
