@@ -22,7 +22,7 @@ def create_weight_grid(grid, base_weight=1):
 
 
 
-def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinations=None):
+def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_pct=60,  param_combinations=None):
     """
     对整个ARC任务的训练数据和测试数据的输入网格应用权重分析，
     找出所有网格中相同形状的对象并进行权重设置
@@ -82,46 +82,7 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinatio
         all_grids['test_inputs'].append((test_id, test_input))
         weight_grids[f'test_input_{test_id}'] = [[0 for _ in range(len(test_input[0]))] for _ in range(len(test_input))]
 
-    # 步骤0：应用网格差异权重（优化版）
-    for pair_id, data_pair in enumerate(train_data):
-        I = data_pair['input']
-        O = data_pair['output']
-        I = tuple(tuple(row) for row in I)
-        O = tuple(tuple(row) for row in O)
 
-        # 获取网格的尺寸
-        rows_i, cols_i = len(I), len(I[0])
-        rows_o, cols_o = len(O), len(O[0])
-
-        # 检查尺寸是否相同（适用grid2grid_fromgriddiff函数的要求）
-        if rows_i == rows_o and cols_i == cols_o:
-            # 生成差异网格
-            diff_i_to_o, diff_o_to_i = grid2grid_fromgriddiff(I, O)
-
-            if diff_i_to_o is not None and diff_o_to_i is not None:
-                # 创建差异权重网格
-                diff_weight_grid = [[0 for _ in range(cols_i)] for _ in range(rows_i)]
-
-                # 填充差异权重
-                for i in range(rows_i):
-                    for j in range(cols_i):
-                        if diff_i_to_o[i][j] is not None:  # 发现差异
-                            diff_weight_grid[i][j] = diff_weight_increment
-
-                # 将差异权重网格添加到输入和输出权重网格
-                weight_grids[f'train_input_{pair_id}'] = add_weight_grids(
-                    weight_grids[f'train_input_{pair_id}'], diff_weight_grid
-                )
-                weight_grids[f'train_output_{pair_id}'] = add_weight_grids(
-                    weight_grids[f'train_output_{pair_id}'], diff_weight_grid
-                )
-        else:
-            # 对于尺寸不同的网格，我们不能直接使用grid2grid_fromgriddiff
-            # 这里可以添加额外的处理逻辑，或者简单地跳过
-            # 例如，使用其他方法计算差异，或者直接使用原始网格
-            raise ValueError(
-                f"输入网格和输出网格的尺寸不匹配: {rows_i}x{cols_i} vs {rows_o}x{cols_o}"
-            )
 
     # 步骤1：生成所有网格的对象集
     for grid_type in all_grids:
@@ -156,7 +117,6 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinatio
 
     # # 步骤3：创建所有对象的规范化形状字典
     # normalized_shapes = {}  # {规范化形状: [(网格ID, 原始对象, 对象类型)]}
-
     # for grid_type in all_grids:
     #     for idx, grid in all_grids[grid_type]:
     #         grid_id = f"{grid_type.rstrip('s')}_{idx}"
@@ -172,6 +132,8 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinatio
     #             if normalized_obj not in normalized_shapes:
     #                 normalized_shapes[normalized_obj] = []
     #             normalized_shapes[normalized_obj].append((grid_id, obj, in_or_out))
+
+
     # 步骤3：创建所有对象的规范化形状字典
     normalized_shapes = {}  # {规范化形状: [(网格ID, 原始对象, 对象类型)]}
 
@@ -216,7 +178,69 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinatio
                     i, j = loc
                     weight_grids[grid_id][i][j] += shape_bonus
 
+
     # 步骤5：分析相同颜色并调整权重
+    apply_color_matching_weights(normalized_shapes, weight_grids, all_grids, pixel_threshold_pct)
+
+
+
+
+    # 步骤0：应用网格差异权重（优化版）
+    for pair_id, data_pair in enumerate(train_data):
+        I = data_pair['input']
+        O = data_pair['output']
+        I = tuple(tuple(row) for row in I)
+        O = tuple(tuple(row) for row in O)
+
+        # 获取网格的尺寸
+        rows_i, cols_i = len(I), len(I[0])
+        rows_o, cols_o = len(O), len(O[0])
+
+        # 检查尺寸是否相同（适用grid2grid_fromgriddiff函数的要求）
+        if rows_i == rows_o and cols_i == cols_o:
+            # 生成差异网格
+            diff_i_to_o, diff_o_to_i = grid2grid_fromgriddiff(I, O)
+
+            if diff_i_to_o is not None and diff_o_to_i is not None:
+                # 创建差异权重网格
+                diff_weight_grid = [[0 for _ in range(cols_i)] for _ in range(rows_i)]
+
+                # 填充差异权重
+                for i in range(rows_i):
+                    for j in range(cols_i):
+                        if diff_i_to_o[i][j] is not None:  # 发现差异
+                            diff_weight_grid[i][j] = diff_weight_increment
+
+                # 将差异权重网格添加到输入和输出权重网格
+                weight_grids[f'train_input_{pair_id}'] = add_weight_grids(
+                    weight_grids[f'train_input_{pair_id}'], diff_weight_grid
+                )
+                weight_grids[f'train_output_{pair_id}'] = add_weight_grids(
+                    weight_grids[f'train_output_{pair_id}'], diff_weight_grid
+                )
+        else:
+            # 对于尺寸不同的网格，我们不能直接使用grid2grid_fromgriddiff
+            # 这里可以添加额外的处理逻辑，或者简单地跳过
+            # 例如，使用其他方法计算差异，或者直接使用原始网格
+            raise ValueError(
+                f"输入网格和输出网格的尺寸不匹配: {rows_i}x{cols_i} vs {rows_o}x{cols_o}"
+            )
+
+
+    return weight_grids
+
+
+# 步骤6：分析相同颜色并调整权重（优化版 - 添加像素占比阈值）
+def apply_color_matching_weights(normalized_shapes, weight_grids, all_grids, pixel_threshold_pct=50):
+    """
+    分析相同形状的对象中的相同颜色，并根据权重调整，同时考虑颜色占比阈值
+
+    参数:
+        normalized_shapes: 规范化形状字典
+        weight_grids: 权重网格字典
+        all_grids: 所有网格的字典
+        pixel_threshold_pct: 颜色占比阈值百分比，超过此阈值的颜色不会被更新
+    """
     for shape, obj_list in normalized_shapes.items():
         if len(obj_list) <= 1:
             continue  # 跳过没有匹配的形状
@@ -224,40 +248,90 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, param_combinatio
         # 按对象权重合计排序
         obj_with_weights = []
         for grid_id, obj, obj_type in obj_list:
+            # 从grid_id获取实际网格，以便计算总像素数
+            grid_type, idx = grid_id.rsplit('_', 1)
+            grid_type += 's'  # 恢复复数形式，例如 'train_input' -> 'train_inputs'
+            idx = int(idx)
+
+            # 获取网格尺寸
+            _, grid = next((g for g in all_grids[grid_type] if g[0] == idx), (None, None))
+            if grid is None:
+                continue
+
+            height, width = len(grid), len(grid[0]) if grid else 0
+            total_pixels = height * width
+
+            # 计算每种颜色的像素数量
+            color_counts = {}
+            for color, _ in obj:
+                if color not in color_counts:
+                    color_counts[color] = 0
+                color_counts[color] += 1
+
+            # 计算权重总和
             weight_sum = sum(weight_grids[grid_id][i][j] for _, (i, j) in obj)
-            obj_with_weights.append((grid_id, obj, obj_type, weight_sum))
+
+            # 保存对象信息、权重和颜色统计
+            obj_with_weights.append((grid_id, obj, obj_type, weight_sum, color_counts, total_pixels))
 
         # 按权重降序排列
         obj_with_weights.sort(key=lambda x: x[3], reverse=True)
 
         # 分析相同颜色
         for i in range(len(obj_with_weights)):
-            high_grid_id, high_obj, high_type, high_weight = obj_with_weights[i]
+            high_grid_id, high_obj, high_type, high_weight, high_color_counts, high_total_pixels = obj_with_weights[i]
+
+            # 预处理高权重对象的颜色索引
+            high_obj_by_color = {}
+            high_color_max_weights = {}
+
+            # 为每种颜色创建索引并计算最大权重
+            for high_val, high_loc in high_obj:
+                if high_val not in high_obj_by_color:
+                    high_obj_by_color[high_val] = []
+                    high_color_max_weights[high_val] = 0
+
+                hi, hj = high_loc
+                current_weight = weight_grids[high_grid_id][hi][hj]
+                high_obj_by_color[high_val].append((high_loc, current_weight))
+                high_color_max_weights[high_val] = max(high_color_max_weights[high_val], current_weight)
 
             for j in range(i+1, len(obj_with_weights)):
-                low_grid_id, low_obj, low_type, low_weight = obj_with_weights[j]
+                low_grid_id, low_obj, low_type, low_weight, low_color_counts, low_total_pixels = obj_with_weights[j]
 
-                # 检查是否有相同颜色
-                matching_colors = has_matching_colors(high_obj, low_obj)
+                # 预处理低权重对象的颜色索引
+                low_obj_by_color = {}
+                for low_val, low_loc in low_obj:
+                    if low_val not in low_obj_by_color:
+                        low_obj_by_color[low_val] = []
+                    low_obj_by_color[low_val].append(low_loc)
 
-                if matching_colors:
-                    # 将低权重对象中匹配颜色的位置提升到高权重
-                    for high_val, high_loc in high_obj:
-                        for low_val, low_loc in low_obj:
-                            if high_val == low_val:  # 颜色匹配
-                                li, lj = low_loc
-                                # 计算高权重对象中相同颜色位置的权重
-                                target_weight = 0
-                                for hv, hl in high_obj:
-                                    if hv == low_val:
-                                        hi, hj = hl
-                                        target_weight = max(target_weight, weight_grids[high_grid_id][hi][hj])
+                # 获取两个对象共有的颜色
+                common_colors = set(high_obj_by_color.keys()) & set(low_obj_by_color.keys())
 
-                                # 提升低权重对象的权重
-                                if target_weight > 0 and weight_grids[low_grid_id][li][lj] < target_weight:
-                                    weight_grids[low_grid_id][li][lj] = target_weight
+                if common_colors:  # 有共有颜色
+                    for color in common_colors:
+                        # 检查高权重对象中该颜色的占比
+                        high_color_pct = (high_color_counts.get(color, 0) / high_total_pixels) * 100
+                        # 检查低权重对象中该颜色的占比
+                        low_color_pct = (low_color_counts.get(color, 0) / low_total_pixels) * 100
 
-    return weight_grids
+                        # 如果任一对象中该颜色占比超过阈值，则跳过
+                        if high_color_pct > pixel_threshold_pct or low_color_pct > pixel_threshold_pct:
+                            continue
+
+                        target_weight = int(high_color_max_weights[color])
+
+                        # 更新低权重对象中共有颜色的所有位置
+                        for li, lj in low_obj_by_color[color]:
+                            if weight_grids[low_grid_id][li][lj] < target_weight:
+                                weight_grids[low_grid_id][li][lj] = target_weight
+
+                        # 如果任一对象中该颜色占比超过阈值，则权重归零
+                        if high_color_pct > pixel_threshold_pct or low_color_pct > pixel_threshold_pct:
+                            
+
+
 
 def has_matching_colors(obj1, obj2):
     """
@@ -502,10 +576,18 @@ def normalize_weight_grid(weight_grid):
 
     max_adjusted = max(adjusted_weights)
 
-    # 第三步：归一化到[0,1]区间
-    normalized_grid = [[weight / max_adjusted if max_adjusted > 0 else 0 for weight in row] for row in adjusted_grid]
+    # 第三步：归一化到[1-9  0,1]区间
+    # normalized_grid = [[weight / max_adjusted if max_adjusted > 0 else 0 for weight in row] for row in adjusted_grid]
+    # 第三步：直接归一化到[1,9]区间
+    # 第三步：将非零元素归一化到[1,9]区间，保留零元素为零
+    normalized_grid = [[1 + (weight / max_adjusted * 8) if weight > 0 and max_adjusted > 0 else 0 if weight == 0 else 1
+                        for weight in row] for row in adjusted_grid]
+    # 整数化
+    normalized_gridint = [[int(1 + (weight / max_adjusted * 8)) if weight > 0 and max_adjusted > 0 else 0 if weight == 0 else 1
+                            for weight in row] for row in adjusted_grid]
 
-    return normalized_grid
+    return normalized_grid,normalized_gridint
+    # return adjusted_grid, adjusted_grid
 
 def apply_weight_correction(weight_grid, scale_factor=9):
     """
@@ -522,6 +604,7 @@ def apply_weight_correction(weight_grid, scale_factor=9):
     """
     # 首先归一化
     normalized_grid = normalize_weight_grid(weight_grid)
+
 
     # 然后应用比例因子
     return [[weight * scale_factor for weight in row] for row in normalized_grid]
