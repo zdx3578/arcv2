@@ -20,7 +20,24 @@ def create_weight_grid(grid, base_weight=1):
     h, w = len(grid), len(grid[0])
     return [[base_weight for _ in range(w)] for _ in range(h)]
 
+def determine_grid_type(grid_id):
+    """
+    根据网格ID确定其类型
 
+    参数:
+        grid_id: 网格ID字符串
+
+    返回:
+        网格类型标识: "in", "out", "diff" 或 "unknown"
+    """
+    if "input" in grid_id:
+        return "in"
+    elif "output" in grid_id:
+        return "out"
+    elif "diff" in grid_id:
+        return "diff"
+    else:
+        return "unknown"  # 默认情况处理
 
 def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_pct=60,  param_combinations=None):
     """
@@ -54,6 +71,7 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_
     # 创建一个存储所有网格和对象的字典
     all_grids = {
         'train_inputs': [],  # [(pair_id, grid), ...]
+        'train_diffs': [],   # [(pair_id, grid), ...]
         'train_outputs': [], # [(pair_id, grid), ...]
         'test_inputs': []    # [(pair_id, grid), ...]
     }
@@ -69,9 +87,13 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_
         I = tuple(tuple(row) for row in I)
         O = tuple(tuple(row) for row in O)
 
+        diff_i_to_o, diff_o_to_i = grid2grid_fromgriddiff(I, O)
+
         # 添加到网格集合
         all_grids['train_inputs'].append((pair_id, I))
         all_grids['train_outputs'].append((pair_id, O))
+
+        all_grids['train_diffs'].append((pair_id, diff_i_to_o))
 
         # 初始化权重网格
         weight_grids[f'train_input_{pair_id}'] = [[0 for _ in range(len(I[0]))] for _ in range(len(I))]
@@ -91,7 +113,9 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_
             height, width = len(grid), len(grid[0]) if grid else 0
 
             # 确定in_or_out参数
-            in_or_out = "in" if "input" in grid_id else "out"
+            # in_or_out = "in" if "input" in grid_id else "out"
+            in_or_out = determine_grid_type(grid_id)
+
 
             # 生成对象集
             object_sets[f"{in_or_out}_obj_set_{grid_id}"] = all_pureobjects_from_grid(param_combinations=param_combinations,
@@ -102,7 +126,12 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_
     for grid_type in all_grids:
         for idx, grid in all_grids[grid_type]:
             grid_id = f"{grid_type.rstrip('s')}_{idx}"
-            in_or_out = "in" if "input" in grid_id else "out"
+            # in_or_out = "in" if "input" in grid_id else "out"
+            in_or_out = determine_grid_type(grid_id)
+
+            if in_or_out == "diff":
+                continue
+
 
             # 获取对象集
             obj_set_key = f"{in_or_out}_obj_set_{grid_id}"
@@ -140,7 +169,9 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_
     for grid_type in all_grids:
         for idx, grid in all_grids[grid_type]:
             grid_id = f"{grid_type.rstrip('s')}_{idx}"
-            in_or_out = "in" if "input" in grid_id else "out"
+            # in_or_out = "in" if "input" in grid_id else "out"
+            in_or_out = determine_grid_type(grid_id)
+
 
             obj_set_key = f"{in_or_out}_obj_set_{grid_id}"
             if obj_set_key not in object_sets:
@@ -174,6 +205,10 @@ def apply_object_weights_for_arc_task(task, weight_increment=2, pixel_threshold_
             shape_bonus = num_objects  # 相同形状的对象数量作为额外权重
 
             for grid_id, obj, _ in obj_list:
+                in_or_out = determine_grid_type(grid_id)
+                if in_or_out == "diff":
+                    continue
+
                 for _, loc in obj:
                     i, j = loc
                     weight_grids[grid_id][i][j] += shape_bonus
@@ -248,6 +283,9 @@ def apply_color_matching_weights(normalized_shapes, weight_grids, all_grids, pix
         # 按对象权重合计排序
         obj_with_weights = []
         for grid_id, obj, obj_type in obj_list:
+            in_or_out = determine_grid_type(grid_id)
+            if in_or_out == "diff":
+                continue
             # 从grid_id获取实际网格，以便计算总像素数
             grid_type, idx = grid_id.rsplit('_', 1)
             grid_type += 's'  # 恢复复数形式，例如 'train_input' -> 'train_inputs'
