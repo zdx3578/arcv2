@@ -609,25 +609,76 @@ def normalize_weight_grid(weight_grid):
     if adjustment > 0:
         adjusted_grid = [[max(0, weight - adjustment) for weight in row] for row in adjusted_grid]
 
-    # 找出调整后的最大值和最小值用于归一化
-    adjusted_weights = [weight for row in adjusted_grid for weight in row]
-    if not adjusted_weights or max(adjusted_weights) <= 0:
-        return [[0 for _ in range(len(weight_grid[0]))] for _ in range(len(weight_grid))]
+    # # 找出调整后的最大值和最小值用于归一化
+    # adjusted_weights = [weight for row in adjusted_grid for weight in row]
+    # if not adjusted_weights or max(adjusted_weights) <= 0:
+    #     return [[0 for _ in range(len(weight_grid[0]))] for _ in range(len(weight_grid))]
 
-    max_adjusted = max(adjusted_weights)
+    # max_adjusted = max(adjusted_weights)
 
-    # 第三步：归一化到[1-9  0,1]区间
-    # normalized_grid = [[weight / max_adjusted if max_adjusted > 0 else 0 for weight in row] for row in adjusted_grid]
-    # 第三步：直接归一化到[1,9]区间
-    # 第三步：将非零元素归一化到[1,9]区间，保留零元素为零
-    normalized_grid = [[1 + (weight / max_adjusted * 8) if weight > 0 and max_adjusted > 0 else 0 if weight == 0 else 1
-                        for weight in row] for row in adjusted_grid]
-    # 整数化
-    normalized_gridint = [[int(1 + (weight / max_adjusted * 8)) if weight > 0 and max_adjusted > 0 else 0 if weight == 0 else 1
-                            for weight in row] for row in adjusted_grid]
+    # # 第三步：归一化到[1-9  0,1]区间
+    # # normalized_grid = [[weight / max_adjusted if max_adjusted > 0 else 0 for weight in row] for row in adjusted_grid]
+    # # 第三步：直接归一化到[1,9]区间
+    # # 第三步：将非零元素归一化到[1,9]区间，保留零元素为零
+    # normalized_grid = [[1 + (weight / max_adjusted * 8) if weight > 0 and max_adjusted > 0 else 0 if weight == 0 else 1
+    #                     for weight in row] for row in adjusted_grid]
+    # # 整数化
+    # normalized_gridint = [[int(1 + (weight / max_adjusted * 8)) if weight > 0 and max_adjusted > 0 else 0 if weight == 0 else 1
+    #                         for weight in row] for row in adjusted_grid]
 
-    return normalized_grid,normalized_gridint
-    # return adjusted_grid, adjusted_grid
+    # return normalized_grid,normalized_gridint
+    # # return adjusted_grid, adjusted_grid
+    if not weight_grid or not weight_grid[0]:
+        return weight_grid, weight_grid
+
+    # 将二维权重网格转换为一维列表
+    all_weights = [weight for row in weight_grid for weight in row]
+
+    if not all_weights:
+        return weight_grid, weight_grid
+
+    # 获取所有非零权重值并排序
+    non_zero_weights = sorted(set(w for w in all_weights if w > 0))
+
+    # 如果没有非零权重，直接返回原始网格
+    if not non_zero_weights:
+        return weight_grid, weight_grid
+
+    # 获取非零权重的数量
+    num_weight_classes = len(non_zero_weights)
+
+    # 创建映射字典 - 将权重值映射到目标值
+    weight_map = {0: 0}  # 保持零值不变
+
+    if num_weight_classes <= 9:
+        # 情况1: 非零权重类别不超过9个，直接映射到1-9
+        for i, w in enumerate(non_zero_weights):
+            weight_map[w] = i + 1  # 1到9的整数值
+    else:
+        # 情况2: 非零权重类别超过9个，需要合并区域
+        # 将权重范围划分为9个等区间
+        min_weight = non_zero_weights[0]
+        max_weight = non_zero_weights[-1]
+        weight_range = max_weight - min_weight
+
+        if weight_range == 0:  # 如果所有非零权重相等
+            for w in non_zero_weights:
+                weight_map[w] = 1
+        else:
+            # 创建9个权重区间
+            for w in non_zero_weights:
+                # 计算归一化值 (0 to 1)
+                normalized = (w - min_weight) / weight_range
+                # 映射到1-9的区间
+                mapped_value = int(1 + normalized * 8)
+                weight_map[w] = mapped_value
+
+    # 应用映射到网格
+    # normalized_grid = [[float(weight_map.get(weight, 0)) for weight in row] for row in weight_grid]
+    normalized_gridint = [[int(weight_map.get(weight, 0)) for weight in row] for row in weight_grid]
+
+    return normalized_gridint, normalized_gridint
+
 
 def apply_weight_correction(weight_grid, scale_factor=9):
     """
