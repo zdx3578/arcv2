@@ -381,11 +381,39 @@ def all_pureobjects_from_grid(param_combinations, the_pair_id: int, in_or_out: s
 
     return acc
 
-def pureobjects_from_grid(param_combinations, the_pair_id: int, in_or_out: str, grid: Grid, hw:list, weight = 0 ) -> FrozenSet[Object]:
+# def pureobjects_from_grid(param_combinations, the_pair_id: int, in_or_out: str, grid: Grid, hw:list, weight = 0 ) -> FrozenSet[Object]:
+#     acc: FrozenSet[Object] = frozenset()  # 初始化空集合
+#     # for params in param_combinations:
+#     acc = acc.union(objects_fromone_params(the_pair_id, in_or_out, grid, param_combinations,hw))
+#         # print()
+
+#     return acc
+def pureobjects_from_grid(param_combinations, the_pair_id: int, in_or_out: str, grid: Grid, hw:list, weight=0, background_color=None) -> FrozenSet[Object]:
+    """
+    从网格中提取对象，可选择过滤掉完全由背景色组成的对象
+
+    参数:
+        param_combinations: 对象提取参数组合
+        the_pair_id: 样本对ID
+        in_or_out: 输入或输出标识
+        grid: 输入网格
+        hw: 高宽列表
+        weight: 权重参数，默认为0
+        background_color: 背景色，默认为None。如果指定（0-9），则过滤掉全部由该背景色组成的对象
+
+    返回:
+        过滤后的对象集合
+    """
     acc: FrozenSet[Object] = frozenset()  # 初始化空集合
-    # for params in param_combinations:
-    acc = acc.union(objects_fromone_params(the_pair_id, in_or_out, grid, param_combinations,hw))
-        # print()
+    acc = acc.union(objects_fromone_params(the_pair_id, in_or_out, grid, param_combinations, hw))
+
+    # 如果指定了背景色，过滤掉全部由背景色组成的对象
+    if background_color is not None:
+        filtered_acc = frozenset(
+            obj for obj in acc if not all(color == background_color for color, _ in obj)
+        )
+        print(f"Filtered objects based on background color {background_color} ,  delete: {len(acc) - len(filtered_acc)} objects")
+        return filtered_acc
 
     return acc
 
