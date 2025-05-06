@@ -412,7 +412,7 @@ def pureobjects_from_grid(param_combinations, the_pair_id: int, in_or_out: str, 
         filtered_acc = frozenset(
             obj for obj in acc if not all(color == background_color for color, _ in obj)
         )
-        print(f"Filtered objects based on background color {background_color} ,  delete: {len(acc) - len(filtered_acc)} objects")
+        print(f"ObjFun: Filtered objects based on background color {background_color} ,  delete: {len(acc) - len(filtered_acc)} objects")
         return filtered_acc
 
     return acc
